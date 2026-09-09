@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>مفرّغ النصوص</title>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+        }
+
+        input {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #status {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>ارفع ملف الصوت</h1>
+
+    <input type="file" id="audioFile" accept="audio/*">
+
+    <br>
+
+    <button id="uploadBtn">ابدأ التفريغ</button>
+
+    <p id="status"></p>
+
+
+    <script>
+
+        const tg = window.Telegram.WebApp;
+
+        tg.ready();
+        tg.expand();
+
+
+        document.getElementById("uploadBtn").addEventListener("click", async () => {
+
+            const file = document.getElementById("audioFile").files[0];
+
+            if (!file) {
+                alert("اختر ملفًا أولاً");
+                return;
+            }
+
+
+            const formData = new FormData();
+
+            formData.append("file", file);
+
+            formData.append(
+                "telegram_user_id",
+                tg.initDataUnsafe.user.id
+            );
+
+
+            document.getElementById("status").innerText =
+                "جاري رفع الملف...";
+
+
+            try {
+
+                const response = await fetch(
+                    "https://waqqad-transcriber.onrender.com/transcribe",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+
+                const data = await response.json();
+
+
+                if (!response.ok) {
+                    throw new Error(data.error || "حدث خطأ أثناء الرفع");
+                }
+
+
+                document.getElementById("status").innerText =
+                    "تم استلام طلبك بنجاح. ستصلك النتيجة هنا في محادثة البوت عند انتهاء التفريغ. يمكنك إغلاق هذه الصفحة الآن.";
+
+            } catch (error) {
+
+                console.error(error);
+
+                document.getElementById("status").innerText =
+                    "حدث خطأ أثناء رفع الملف. حاول مرة أخرى.";
+
+            }
+
+        });
+
+    </script>
+
+</body>
+</html>
