@@ -277,6 +277,7 @@
     const engineEl = document.getElementById("engine");
 
     let pollTimer = null;
+    let uploadXhr = null;
 
     function humanSize(bytes) {
       if (!Number.isFinite(bytes)) return "";
@@ -377,7 +378,7 @@
       }
     }
 
-    uploadBtn.addEventListener("click", async () => {
+    uploadBtn.addEventListener("click", () => {
       const file = fileInput.files[0];
       if (!file) {
         if (tg?.showAlert) tg.showAlert("اختر ملفًا أولًا");
@@ -399,32 +400,63 @@
 
       uploadBtn.disabled = true;
       engineEl.style.display = "none";
-      showStatus("⬆️ جارٍ رفع الملف إلى الوقّاد…", 12);
+      showStatus("⬆️ جارٍ رفع الملف إلى الوقّاد… 0%", 2);
 
-      try {
-        const response = await fetch(`${API}/transcribe`, {
-          method: "POST",
-          body: formData
-        });
+      const xhr = new XMLHttpRequest();
+      uploadXhr = xhr;
+      xhr.open("POST", `${API}/transcribe`, true);
+      xhr.timeout = 30 * 60 * 1000;
 
-        const rawText = await response.text();
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+        const barWidth = Math.max(2, Math.round(percent * 0.16));
+        showStatus(`⬆️ جارٍ رفع الملف إلى الوقّاد… ${percent}%`, barWidth);
+      };
+
+      xhr.onload = () => {
+        uploadXhr = null;
         let data = null;
-        try { data = JSON.parse(rawText); } catch (_) {}
+        try { data = JSON.parse(xhr.responseText || "{}"); } catch (_) {}
 
-        if (!response.ok) {
-          throw new Error(data?.error || `HTTP ${response.status} - ${rawText.slice(0, 200)}`);
+        if (xhr.status < 200 || xhr.status >= 300) {
+          const msg = data?.error || `تعذر رفع الملف إلى الخادم (HTTP ${xhr.status}).`;
+          showStatus(`❌ ${msg}`, 100, "error");
+          uploadBtn.disabled = false;
+          return;
         }
 
-        if (!data?.job_id) throw new Error("لم يُرجع الخادم رقم المهمة.");
+        if (!data?.job_id) {
+          showStatus("❌ استلم الخادم الملف، لكنه لم يُرجع رقم المهمة.", 100, "error");
+          uploadBtn.disabled = false;
+          return;
+        }
 
-        showStatus("✅ تم رفع الملف.\nجارٍ بدء التفريغ…", 18);
+        showStatus("✅ اكتمل رفع الملف.\nجارٍ بدء التفريغ…", 18);
         pollJob(data.job_id);
+      };
 
-      } catch (error) {
-        console.error(error);
-        showStatus("❌ حدث خطأ:\n" + error.message, 100, "error");
+      xhr.onerror = () => {
+        uploadXhr = null;
+        showStatus(
+          "❌ انقطع الاتصال أثناء رفع الملف.\nتحقق من الشبكة ثم أعد المحاولة. لا حاجة إلى تغيير الملف.",
+          100,
+          "error"
+        );
         uploadBtn.disabled = false;
-      }
+      };
+
+      xhr.ontimeout = () => {
+        uploadXhr = null;
+        showStatus(
+          "⌛ استغرق رفع الملف وقتًا أطول من المتوقع.\nتحقق من اتصالك ثم أعد المحاولة.",
+          100,
+          "error"
+        );
+        uploadBtn.disabled = false;
+      };
+
+      xhr.send(formData);
     });
   </script>
 </body>
