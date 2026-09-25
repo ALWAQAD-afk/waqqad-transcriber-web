@@ -21,7 +21,9 @@
 
     * { box-sizing: border-box; }
 
-    html, body { margin: 0; min-height: 100%; }
+    html, body { margin: 0; min-height: 100%; 
+      padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+}
 
     body {
       font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
@@ -410,8 +412,12 @@
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) return;
         const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
-        const barWidth = Math.max(2, Math.round(percent * 0.16));
-        showStatus(`⬆️ جارٍ رفع الملف إلى الوقّاد… ${percent}%`, barWidth);
+        const barWidth = Math.max(2, percent);
+        if (percent >= 100) {
+          showStatus("📤 اكتمل إرسال الملف من جهازك.\nجارٍ تأكيد استلام الوقّاد…", 100);
+        } else {
+          showStatus(`⬆️ جارٍ رفع الملف إلى الوقّاد… ${percent}%`, barWidth);
+        }
       };
 
       xhr.onload = () => {
@@ -432,7 +438,7 @@
           return;
         }
 
-        showStatus("✅ اكتمل رفع الملف.\nجارٍ بدء التفريغ…", 18);
+        showStatus("✅ استلم الوقّاد الملف. يمكنك إغلاق الصفحة الآن؛ سيستمر التفريغ في الخلفية.", 100, "success");
         pollJob(data.job_id);
       };
 
