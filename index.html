@@ -328,7 +328,10 @@
     async function pollJob(jobId) {
       try {
         const response = await fetch(`${API}/status/${encodeURIComponent(jobId)}`, {
-          cache: "no-store"
+          cache: "no-store",
+          headers: {
+            "X-Telegram-Init-Data": tg?.initData || ""
+          }
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -389,7 +392,8 @@
       }
 
       const userId = tg?.initDataUnsafe?.user?.id;
-      if (!userId) {
+      const initData = tg?.initData || "";
+      if (!userId || !initData) {
         showStatus("❌ تعذر التعرف على حساب تيليغرام. افتح الصفحة من داخل البوت.", 100, "error");
         return;
       }
@@ -398,7 +402,6 @@
 
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("telegram_user_id", userId);
 
       uploadBtn.disabled = true;
       engineEl.style.display = "none";
@@ -407,6 +410,7 @@
       const xhr = new XMLHttpRequest();
       uploadXhr = xhr;
       xhr.open("POST", `${API}/transcribe`, true);
+      xhr.setRequestHeader("X-Telegram-Init-Data", initData);
       xhr.timeout = 30 * 60 * 1000;
 
       xhr.upload.onprogress = (event) => {
