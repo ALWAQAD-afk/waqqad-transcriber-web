@@ -150,6 +150,60 @@
     button:active { transform: scale(.99); }
     button:disabled { opacity: .48; cursor: default; }
 
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--hint);
+      font-size: 12px;
+      margin: 18px 0 12px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .url-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #urlInput {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 13px 14px;
+      font: inherit;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      direction: ltr;
+      text-align: left;
+    }
+
+    #urlInput:focus {
+      outline: 2px solid var(--button);
+      outline-offset: 1px;
+    }
+
+    .url-hint {
+      color: var(--hint);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    #urlBtn {
+      margin-top: 0;
+      background: transparent;
+      color: var(--button);
+      border: 1px solid var(--button);
+    }
+
     .status-card {
       display: none;
       margin-top: 16px;
@@ -226,7 +280,7 @@
     <section class="hero">
       <div class="logo">🎙️</div>
       <h1>مفرّغ الوقّاد</h1>
-      <p class="subtitle">ارفع ملفك الصوتي، وسيصل النص المفرّغ إلى محادثة البوت فور اكتماله.</p>
+      <p class="subtitle">ارفع ملفك الصوتي أو الصق رابط يوتيوب أو رابط ملف مباشر، وسيصل النص المفرّغ إلى محادثة البوت فور اكتماله.</p>
     </section>
 
     <section class="card">
@@ -244,6 +298,20 @@
       </div>
 
       <button id="uploadBtn" disabled>ابدأ التفريغ</button>
+
+      <div class="divider">أو فرّغ رابطًا</div>
+
+      <div class="url-box">
+        <input
+          id="urlInput"
+          type="url"
+          inputmode="url"
+          autocomplete="off"
+          placeholder="https://youtube.com/watch?v=..."
+        >
+        <div class="url-hint">يوتيوب، أو رابط ملف mp3 / m4a / wav / mp4 مباشر. حتى 150MB.</div>
+        <button id="urlBtn">📎 تفريغ الرابط</button>
+      </div>
     </section>
 
     <section class="status-card" id="statusCard">
@@ -270,6 +338,8 @@
     const API = "https://waqqad-transcriber.onrender.com";
     const fileInput = document.getElementById("audioFile");
     const uploadBtn = document.getElementById("uploadBtn");
+    const urlInput = document.getElementById("urlInput");
+    const urlBtn = document.getElementById("urlBtn");
     const fileInfo = document.getElementById("fileInfo");
     const fileName = document.getElementById("fileName");
     const fileSize = document.getElementById("fileSize");
@@ -299,8 +369,14 @@
       progressBar.style.width = `${width}%`;
     }
 
+    function setBusy(busy) {
+      uploadBtn.disabled = busy;
+      urlBtn.disabled = busy;
+    }
+
     const stageText = {
       queued: ["⏳ تم استلام الطلب، جارٍ بدء المهمة…", 18],
+      downloading_url: ["⬇️ جارٍ تنزيل الرابط وتجهيز الصوت…", 28],
       preparing_audio: ["🎛️ جارٍ تجهيز الصوت وتقسيمه…", 34],
       transcribing_cohere: ["✍️ جارٍ تفريغ الصوت…", 62],
       merging: ["🧩 جارٍ دمج أجزاء النص…", 82],
@@ -339,7 +415,7 @@
 
         if (job.status === "failed") {
           showStatus("❌ تعذر إكمال التفريغ.\n" + (job.error || "حدث خطأ غير متوقع."), 100, "error");
-          uploadBtn.disabled = false;
+          setBusy(false);
           return;
         }
 
@@ -355,7 +431,7 @@
             engineEl.style.display = "block";
             engineEl.textContent = `المحرك: ${job.engine === "cohere" ? "Cohere Arabic" : "Deepgram (احتياطي)"}`;
           }
-          uploadBtn.disabled = false;
+          setBusy(false);
           return;
         }
 
@@ -403,7 +479,7 @@
       const formData = new FormData();
       formData.append("file", file);
 
-      uploadBtn.disabled = true;
+      setBusy(true);
       engineEl.style.display = "none";
       showStatus("⬆️ جارٍ رفع الملف إلى الوقّاد… 0%", 2);
 
@@ -432,13 +508,13 @@
         if (xhr.status < 200 || xhr.status >= 300) {
           const msg = data?.error || `تعذر رفع الملف إلى الخادم (HTTP ${xhr.status}).`;
           showStatus(`❌ ${msg}`, 100, "error");
-          uploadBtn.disabled = false;
+          setBusy(false);
           return;
         }
 
         if (!data?.job_id) {
           showStatus("❌ استلم الخادم الملف، لكنه لم يُرجع رقم المهمة.", 100, "error");
-          uploadBtn.disabled = false;
+          setBusy(false);
           return;
         }
 
@@ -453,7 +529,7 @@
           100,
           "error"
         );
-        uploadBtn.disabled = false;
+        setBusy(false);
       };
 
       xhr.ontimeout = () => {
@@ -463,10 +539,73 @@
           100,
           "error"
         );
-        uploadBtn.disabled = false;
+        setBusy(false);
       };
 
       xhr.send(formData);
+    });
+
+    async function submitUrl() {
+      const url = urlInput.value.trim();
+      if (!url) {
+        if (tg?.showAlert) tg.showAlert("الصق رابط يوتيوب أو رابط ملف أولًا");
+        else alert("الصق رابط يوتيوب أو رابط ملف أولًا");
+        return;
+      }
+
+      if (!/^https?:\/\/\S+$/i.test(url)) {
+        showStatus("❌ الرابط يجب أن يبدأ بـ http:// أو https://", 100, "error");
+        return;
+      }
+
+      const userId = tg?.initDataUnsafe?.user?.id;
+      const initData = tg?.initData || "";
+      if (!userId || !initData) {
+        showStatus("❌ تعذر التعرف على حساب تيليغرام. افتح الصفحة من داخل البوت.", 100, "error");
+        return;
+      }
+
+      if (pollTimer) clearTimeout(pollTimer);
+
+      setBusy(true);
+      engineEl.style.display = "none";
+      showStatus("🔗 جارٍ إرسال الرابط إلى الوقّاد…", 8);
+
+      try {
+        const response = await fetch(`${API}/transcribe-url`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Telegram-Init-Data": initData
+          },
+          body: JSON.stringify({ url })
+        });
+
+        let data = null;
+        try { data = await response.json(); } catch (_) {}
+
+        if (!response.ok || !data?.job_id) {
+          const msg = data?.error || `تعذر إرسال الرابط إلى الخادم (HTTP ${response.status}).`;
+          showStatus(`❌ ${msg}`, 100, "error");
+          setBusy(false);
+          return;
+        }
+
+        showStatus("✅ استلم الوقّاد الرابط. سيبدأ التنزيل ثم التفريغ في الخلفية.", 20, "success");
+        pollJob(data.job_id);
+      } catch (error) {
+        console.error(error);
+        showStatus("❌ انقطع الاتصال أثناء إرسال الرابط.\nتحقق من الشبكة ثم أعد المحاولة.", 100, "error");
+        setBusy(false);
+      }
+    }
+
+    urlBtn.addEventListener("click", submitUrl);
+    urlInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitUrl();
+      }
     });
   </script>
 </body>
